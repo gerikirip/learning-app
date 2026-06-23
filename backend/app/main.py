@@ -2,9 +2,10 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
+from sqlalchemy import text
 
 from app.api import router
 from app.core.config import settings
@@ -31,15 +32,18 @@ def initialize_database() -> dict[str, int | bool]:
         return seed_devops_content(db)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def verify_database_connection() -> None:
+    with SessionLocal() as db:
+        db.execute(text("SELECT 1"))
+
+
+def initialize_database_with_retries() -> dict[str, int | bool]:
     last_error: Exception | None = None
     for attempt in range(1, DB_INIT_RETRIES + 1):
         try:
             stats = initialize_database()
             logger.info("Database initialized: %s", stats)
-            last_error = None
-            break
+            return stats
         except Exception as exc:
             last_error = exc
             if attempt < DB_INIT_RETRIES:
@@ -50,14 +54,18 @@ async def lifespan(app: FastAPI):
                     DB_INIT_RETRY_DELAY_SECONDS,
                 )
                 time.sleep(DB_INIT_RETRY_DELAY_SECONDS)
-            else:
-                logger.exception(
-                    "Database initialization failed after %s attempts. "
-                    "Check DATABASE_URL and call POST /api/admin/seed after fixing it.",
-                    DB_INIT_RETRIES,
-                )
-    if last_error is not None:
-        logger.error("App started without database: %s", last_error)
+
+    logger.exception(
+        "Database initialization failed after %s attempts. Check DATABASE_URL.",
+        DB_INIT_RETRIES,
+    )
+    assert last_error is not None
+    raise last_error
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_database_with_retries()
     yield
 
 
@@ -83,7 +91,14 @@ async def metrics_middleware(request, call_next):
 
 @app.get("/health", tags=["platform"])
 def health() -> dict[str, str]:
-    return {"status": "UP"}
+    try:
+        verify_database_connection()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "DOWN", "database": "unavailable"},
+        ) from exc
+    return {"status": "UP", "database": "connected"}
 
 
 @app.post("/api/admin/seed", tags=["platform"])
