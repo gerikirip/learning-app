@@ -1,13 +1,16 @@
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_name: str = "DevOps Learning App"
-    database_url: str = "postgresql+psycopg://learning:learning@db:5432/learningdb"
+    database_url: str = Field(
+        default="postgresql+psycopg://learning:learning@db:5432/learningdb",
+        validation_alias=AliasChoices("DATABASE_URL", "database_url"),
+    )
     cors_origins: str = "http://localhost:5173"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
 
     @field_validator("database_url", mode="before")
     @classmethod

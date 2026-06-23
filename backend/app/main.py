@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
@@ -12,6 +13,7 @@ from app.models import Card, Deck, Review  # noqa: F401 - imported so metadata i
 from app.services.seed_service import seed_devops_content
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 REQUESTS_TOTAL = Counter(
     "learning_app_http_requests_total",
@@ -19,22 +21,43 @@ REQUESTS_TOTAL = Counter(
     ["method", "path"],
 )
 
+DB_INIT_RETRIES = 10
+DB_INIT_RETRY_DELAY_SECONDS = 3
 
-def initialize_database() -> None:
+
+def initialize_database() -> dict[str, int | bool]:
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
-        seed_devops_content(db)
+        return seed_devops_content(db)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        initialize_database()
-    except Exception:
-        logger.exception(
-            "Database initialization failed. /health will still respond, "
-            "but API routes need a valid DATABASE_URL."
-        )
+    last_error: Exception | None = None
+    for attempt in range(1, DB_INIT_RETRIES + 1):
+        try:
+            stats = initialize_database()
+            logger.info("Database initialized: %s", stats)
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < DB_INIT_RETRIES:
+                logger.warning(
+                    "Database init attempt %s/%s failed, retrying in %ss",
+                    attempt,
+                    DB_INIT_RETRIES,
+                    DB_INIT_RETRY_DELAY_SECONDS,
+                )
+                time.sleep(DB_INIT_RETRY_DELAY_SECONDS)
+            else:
+                logger.exception(
+                    "Database initialization failed after %s attempts. "
+                    "Check DATABASE_URL and call POST /api/admin/seed after fixing it.",
+                    DB_INIT_RETRIES,
+                )
+    if last_error is not None:
+        logger.error("App started without database: %s", last_error)
     yield
 
 
@@ -61,6 +84,12 @@ async def metrics_middleware(request, call_next):
 @app.get("/health", tags=["platform"])
 def health() -> dict[str, str]:
     return {"status": "UP"}
+
+
+@app.post("/api/admin/seed", tags=["platform"])
+def run_seed() -> dict[str, int | bool]:
+    """Create tables and seed DevOps decks if the database is empty."""
+    return initialize_database()
 
 
 @app.get("/metrics", tags=["platform"])
