@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: learning-db-secret
+  namespace: {{ .Values.namespace }}
+type: Opaque
+stringData:
+  POSTGRES_USER: {{ .Values.postgres.username | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgres.password | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: learning-db-config
+  namespace: {{ .Values.namespace }}
+data:
+  POSTGRES_DB: {{ .Values.postgres.database | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: learning-db-pvc
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.postgres.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: learning-db
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: learning-db
+  template:
+    metadata:
+      labels:
+        app: learning-db
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: learning-db-config
+            - secretRef:
+                name: learning-db-secret
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: learning-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: learning-db
+  namespace: {{ .Values.namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: learning-db
+  ports:
+    - port: 5432
+      targetPort: 5432

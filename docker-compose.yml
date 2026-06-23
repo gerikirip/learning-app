@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-learningdb}
+      POSTGRES_USER: ${POSTGRES_USER:-learning}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-learning}
+    volumes:
+      - learning_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-learning} -d ${POSTGRES_DB:-learningdb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - learning-net
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://learning:learning@db:5432/learningdb}
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - learning-net
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    depends_on:
+      - backend
+    networks:
+      - learning-net
+
+volumes:
+  learning_pgdata:
+
+networks:
+  learning-net:
+    driver: bridge

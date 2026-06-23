@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: learning-db-secret
+  namespace: devops-learning
+type: Opaque
+stringData:
+  POSTGRES_USER: learning
+  POSTGRES_PASSWORD: learning
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: learning-db-config
+  namespace: devops-learning
+data:
+  POSTGRES_DB: learningdb
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: learning-db-pvc
+  namespace: devops-learning
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: learning-db
+  namespace: devops-learning
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: learning-db
+  template:
+    metadata:
+      labels:
+        app: learning-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: learning-db-config
+            - secretRef:
+                name: learning-db-secret
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: learning-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: learning-db
+  namespace: devops-learning
+spec:
+  type: ClusterIP
+  selector:
+    app: learning-db
+  ports:
+    - port: 5432
+      targetPort: 5432

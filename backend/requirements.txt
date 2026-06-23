@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg[binary]
+pydantic-settings
+python-dotenv
+pytest
+httpx
+prometheus-client
