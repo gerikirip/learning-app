@@ -67,38 +67,73 @@ curl -X POST http://localhost:8000/api/decks \
 
 ## Deploy to Railway
 
-Railway needs **3 services** from this repo (plus a PostgreSQL database).
+Use **3 services** from this repo: PostgreSQL, backend, and frontend.
+
+The frontend nginx proxy sends `/api/*` to the backend on Railway's private network, so you do **not** need `VITE_API_BASE_URL` or `CORS_ORIGINS` on Railway.
 
 ### 1. PostgreSQL
 
-1. In your Railway project, click **+ New** → **Database** → **PostgreSQL**
-2. Copy the `DATABASE_URL` variable from the Postgres service
+1. **+ New** → **Database** → **PostgreSQL**
 
 ### 2. Backend
 
-1. **+ New** → **GitHub Repo** → select `learning-app`
-2. Set **Root Directory** to `backend` (or use repo root — it has a root `Dockerfile` for backend)
-3. Railway will detect `railway.toml` and build with Docker (not Railpack)
-4. Add variables:
-   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (required — without this the app starts but decks API will fail)
-   - `CORS_ORIGINS` = your frontend URL (set after frontend deploys), e.g. `https://your-frontend.up.railway.app`
+1. **+ New** → **GitHub Repo** → `learning-app`
+2. **Root Directory:** `backend` (or repo root — it has a root `Dockerfile` for backend)
+3. **Variables** (only this one is required):
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+
+Replace `Postgres` with your database service name if different.
+
+4. Generate a public domain (optional — frontend proxies API calls internally)
 
 ### 3. Frontend
 
 1. **+ New** → **GitHub Repo** → same `learning-app` repo
-2. Set **Root Directory** to `frontend`
-3. Add variable (must be available at **build** time):
-   - `VITE_API_BASE_URL` = `https://${{backend.RAILWAY_PUBLIC_DOMAIN}}` (replace `backend` with your backend service name)
-4. Generate a public domain under **Settings → Networking**
+2. **Root Directory:** `frontend`
+3. **Variables** (only this one is required):
+
+| Variable | Value |
+|----------|-------|
+| `BACKEND_URL` | `http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:${{backend.PORT}}` |
+
+Replace `backend` with your backend service name.
+
+4. Generate a public domain — **this is the URL you open in the browser**
+
+5. **Redeploy** after changing variables
+
+### Remove wrong variables
+
+Do **not** put these on the wrong service:
+
+| Variable | Backend | Frontend | Postgres |
+|----------|---------|----------|----------|
+| `DATABASE_URL` | ✅ reference Postgres | ❌ | auto |
+| `BACKEND_URL` | ❌ | ✅ | ❌ |
+| `VITE_API_BASE_URL` | ❌ | ❌ (not needed) | ❌ |
+| `CORS_ORIGINS` | ❌ (not needed) | ❌ | ❌ |
+| `POSTGRES_*` | ❌ (use DATABASE_URL) | ❌ | auto |
+
+### Verify
+
+Open your **frontend** URL in the browser, then check:
+
+```bash
+curl https://YOUR-FRONTEND.up.railway.app/health
+curl https://YOUR-FRONTEND.up.railway.app/api/decks
+```
 
 ### Troubleshooting
 
 | Error | Fix |
 |-------|-----|
-| `Script start.sh not found` / Railpack failed | Ensure `railway.toml` exists and **Builder** is set to **Dockerfile** in service settings |
-| Backend can't connect to DB | Link `DATABASE_URL` from the Postgres plugin |
-| Frontend shows network errors | Set `VITE_API_BASE_URL` to the backend public URL and **redeploy** frontend (Vite bakes it in at build time) |
-| CORS errors | Set `CORS_ORIGINS` on backend to the frontend public URL |
+| `Script start.sh not found` / Railpack failed | Builder must be **Dockerfile** (`railway.toml` in repo) |
+| Backend health check fails | Link `DATABASE_URL=${{Postgres.DATABASE_URL}}` and redeploy |
+| Frontend loads but no decks | Set `BACKEND_URL` on frontend and redeploy |
+| Empty database | `curl -X POST https://YOUR-BACKEND.up.railway.app/api/admin/seed` |
 
 ## Kubernetes
 

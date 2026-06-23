@@ -11,11 +11,15 @@ EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
 FROM base AS build
-ARG VITE_API_BASE_URL=http://localhost:8000
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 FROM nginx:1.29-alpine AS prod
+RUN apk add --no-cache gettext
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
