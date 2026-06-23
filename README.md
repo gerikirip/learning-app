@@ -80,7 +80,7 @@ Railway needs **3 services** from this repo (plus a PostgreSQL database).
 2. Set **Root Directory** to `backend` (or use repo root — it has a root `Dockerfile` for backend)
 3. Railway will detect `railway.toml` and build with Docker (not Railpack)
 4. Add variables:
-   - `DATABASE_URL` = reference from Postgres service (`${{Postgres.DATABASE_URL}}`)
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (required — without this the app starts but decks API will fail)
    - `CORS_ORIGINS` = your frontend URL (set after frontend deploys), e.g. `https://your-frontend.up.railway.app`
 
 ### 3. Frontend

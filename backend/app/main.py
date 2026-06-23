@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
@@ -10,6 +11,8 @@ from app.db.session import Base, SessionLocal, engine
 from app.models import Card, Deck, Review  # noqa: F401 - imported so metadata is registered
 from app.services.seed_service import seed_devops_content
 
+logger = logging.getLogger(__name__)
+
 REQUESTS_TOTAL = Counter(
     "learning_app_http_requests_total",
     "Total HTTP requests handled by the learning app",
@@ -17,11 +20,21 @@ REQUESTS_TOTAL = Counter(
 )
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def initialize_database() -> None:
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_devops_content(db)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        initialize_database()
+    except Exception:
+        logger.exception(
+            "Database initialization failed. /health will still respond, "
+            "but API routes need a valid DATABASE_URL."
+        )
     yield
 
 
