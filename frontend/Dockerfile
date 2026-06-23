@@ -18,7 +18,8 @@ RUN npm run build
 FROM nginx:1.27-alpine AS prod
 RUN rm -f /etc/nginx/conf.d/default.conf
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY docker-entrypoint.d/40-configure-backend.sh /docker-entrypoint.d/40-configure-backend.sh
+RUN chmod +x /docker-entrypoint.d/40-configure-backend.sh
 COPY --from=build /app/dist /usr/share/nginx/html
-ENV PORT=8080 \
-    BACKEND_URL=http://127.0.0.1:8000
+ENV PORT=8080
 EXPOSE 8080
