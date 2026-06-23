@@ -1,9 +1,15 @@
 server {
-    listen ${PORT};
+    listen 0.0.0.0:${PORT} default_server;
     server_name _;
 
     root /usr/share/nginx/html;
     index index.html;
+
+    location = /healthz {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
 
     location /api/ {
         proxy_pass ${BACKEND_URL};

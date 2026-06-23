@@ -133,6 +133,7 @@ curl https://YOUR-FRONTEND.up.railway.app/api/decks
 | `Script start.sh not found` / Railpack failed | Builder must be **Dockerfile** (`railway.toml` in repo) |
 | Backend health check fails | Link `DATABASE_URL=${{Postgres.DATABASE_URL}}` and redeploy |
 | Frontend loads but no decks | Set `BACKEND_URL` on frontend and redeploy |
+| Frontend health check fails | Use path `/healthz`; ensure Root Directory is `frontend` |
 | Empty database | `curl -X POST https://YOUR-BACKEND.up.railway.app/api/admin/seed` |
 
 ## Kubernetes
